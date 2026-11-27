@@ -87,7 +87,7 @@ kbd{font:600 13px Kanit,sans-serif;background:#fff;border:1px solid #c9dcf5;bord
   <div class="chip"><span>ตก</span><b id="hF">0</b></div>
 </div>
 <div id="tr">
-  <div class="row"><button id="bView" title="สลับมุมมอง (V)">มุมมอง 3</button><button id="bSound" title="เปิด/ปิดเสียง (M)">เสียง: เปิด</button><button id="bPause" title="พักเกม (Esc)">พัก</button></div>
+  <div class="row"><button id="bView" title="สลับมุมมอง (V)">มุมมอง 3</button><button class="blue" id="bLinkTop" style="display:none">ลิงก์ห้อง</button><button id="bSound" title="เปิด/ปิดเสียง (M)">เสียง: เปิด</button><button id="bPause" title="พักเกม (Esc)">พัก</button></div>
   <div id="plist"></div>
 </div>
 <div id="cross"></div>
@@ -103,6 +103,7 @@ kbd{font:600 13px Kanit,sans-serif;background:#fff;border:1px solid #c9dcf5;bord
     <label for="nameIn">ชื่อ</label><input id="nameIn" maxlength="14" value="ผู้เล่น">
     <div class="cols" id="cols"></div>
   </div>
+  <div class="row" id="hatRow"></div>
   <div class="row"><div class="seg" id="viewSeg">
     <button data-v="3" class="sel">บุคคลที่ 3</button><button data-v="1">บุคคลที่ 1</button>
   </div></div>
@@ -133,6 +134,8 @@ kbd{font:600 13px Kanit,sans-serif;background:#fff;border:1px solid #c9dcf5;bord
 <div class="ov" id="pause"><div class="card">
   <h2>พักเกม</h2>
   <p class="sub" id="pauseRoom"></p>
+  <div class="row" id="inviteRow"><button class="blue" id="bInvite">สร้างห้องชวนเพื่อน (ได้ลิงก์)</button></div>
+  <p class="note" id="inviteNote" style="margin:0 0 8px"></p>
   <div class="row" id="linkRow"><input id="linkIn" readonly style="width:260px;font-size:14px"><button class="blue" id="bCopy">คัดลอกลิงก์</button></div>
   <div class="row"><button class="big" id="bResume">เล่นต่อ</button></div>
   <div class="row"><button id="bCp">กลับจุดเซฟ</button><button id="bRestart">เริ่มใหม่ (แผนที่เดิม)</button></div>
@@ -184,7 +187,7 @@ function makeChar(col){
   const torso=box(1,1,.5,shirt);torso.position.y=1.5;body.add(torso);
   const head=box(.62,.62,.62,[skin,skin,skin,skin,faceMat,skin]);head.position.y=2.32;body.add(head);
   const limb=(x,y,mat)=>{const p=new THREE.Group();p.position.set(x,y,0);const m=box(.48,1,.48,mat);m.position.y=-.5;p.add(m);body.add(p);return p};
-  const c={root,shirt,lA:limb(-.75,2,skin),rA:limb(.75,2,skin),lL:limb(-.25,1,pants),rL:limb(.25,1,pants),ph:0};
+  const c={root,body,shirt,lA:limb(-.75,2,skin),rA:limb(.75,2,skin),lL:limb(-.25,1,pants),rL:limb(.25,1,pants),ph:0};
   scene.add(root);return c;
 }
 function animChar(c,sp,air,vy,dt){
@@ -195,6 +198,33 @@ function animChar(c,sp,air,vy,dt){
   c.lL.rotation.x+=(ll-c.lL.rotation.x)*k;c.rL.rotation.x+=(rl-c.rL.rotation.x)*k;
 }
 const me=makeChar(myCol);
+
+// ---------- hats (prizes) ----------
+const HATS=['ไม่ใส่','มงกุฎทอง','หมวกพ่อมด','หมวกปาร์ตี้'];
+const prizeHatFor=L=>((L/10-1)%3)+1;
+let ownedHats=(store.get('hats',[])||[]).filter(h=>h>=1&&h<=3),wearing=store.get('hat',0)|0;if(!ownedHats.includes(wearing))wearing=0;
+function setHat(c,id){
+  if(c.hat){c.body.remove(c.hat);c.hat.traverse(x=>{if(x.geometry)x.geometry.dispose()})}c.hat=null;if(!id)return;
+  const g=new THREE.Group(),L=(col,em)=>new THREE.MeshLambertMaterial({color:col,emissive:em||'#000'});
+  if(id===1){const gold=L('#ffc928','#5a3b00');g.add(box(.72,.2,.72,gold));
+    for(const [x,z] of [[-.3,-.3],[.3,-.3],[-.3,.3],[.3,.3],[0,-.3],[0,.3],[-.3,0],[.3,0]]){const sp=box(.12,.22,.12,gold);sp.position.set(x,.2,z);g.add(sp)}
+    const gem=box(.16,.16,.06,L('#e0453a','#400'));gem.position.set(0,0,.37);g.add(gem);g.position.y=2.73}
+  if(id===2){const m=L('#5b3fc4');const brim=new THREE.Mesh(new THREE.CylinderGeometry(.6,.6,.06,16),m);
+    const cone=new THREE.Mesh(new THREE.ConeGeometry(.38,1.05,12),m);cone.position.y=.55;cone.rotation.z=.12;
+    const star=box(.15,.15,.04,L('#ffd84a','#554400'));star.position.set(0,.32,.3);star.rotation.z=.78;g.add(brim,cone,star);g.position.y=2.66}
+  if(id===3){const cone=new THREE.Mesh(new THREE.ConeGeometry(.28,.7,12),L('#ff5aa5'));cone.position.y=.35;
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(.24,.27,.08,12),L('#ffd84a'));band.position.y=.1;
+    const pom=new THREE.Mesh(new THREE.SphereGeometry(.12,10,8),L('#ffffff'));pom.position.y=.74;g.add(cone,band,pom);g.position.y=2.63}
+  g.traverse(x=>{if(x.isMesh)x.castShadow=true});c.body.add(g);c.hat=g;
+}
+function wearHat(id){wearing=id;store.set('hat',id);setHat(me,id);renderHats()}
+function renderHats(){const r=$('hatRow');r.textContent='';
+  const lb=document.createElement('label');lb.textContent='หมวก';r.append(lb);
+  if(!ownedHats.length){const n=document.createElement('span');n.className='note';n.style.margin='0';
+    n.textContent='ยังไม่มีหมวก (ออนไลน์: ถึงธงแดงด่าน 10 เป็นคนแรกเพื่อรับ)';r.append(n);return}
+  const seg=document.createElement('div');seg.className='seg';
+  for(const id of [0,...ownedHats]){const b=document.createElement('button');b.textContent=HATS[id];b.classList.toggle('sel',id===wearing);b.onclick=()=>wearHat(id);seg.append(b)}
+  r.append(seg)}
 
 // ---------- sound effects (synthesized with Web Audio, no files) ----------
 const SFX=(()=>{
@@ -299,7 +329,7 @@ function buildLevel(L){
     cur={x:o.x,z:o.z,top:o.y,hw:w/2,hd:d/2};
   }
 }
-function ensureLevels(n){n=Math.min(n,level+12,80);while(built<n){built++;buildLevel(built)}}
+function ensureLevels(n){n=Math.min(n,level+12,80);while(built<n){built++;buildLevel(built)}syncPrizes()}
 
 // ---------- player ----------
 const P={pos:new THREE.Vector3(),vel:new THREE.Vector3(),r:.42,h:2.2,ground:null,grounded:false,coyote:0,buf:0,face:0};
@@ -323,6 +353,8 @@ function setCheckpoint(p,silent){checkpoint=p;cpCount++;if(p.flag)p.flag.materia
 function reachGoal(g){
   level=g.L+1;setCheckpoint(g,true);ensureLevels(level);
   toast(`ผ่านด่าน ${g.L}!`,`ด่าน ${level} ยากขึ้นแล้ว`);SFX.level();
+  if(net.ready&&g.L%10===0)tryClaim(g.L);
+  if(net.ready&&level%10===0&&!net.claimed.has(level))setTimeout(()=>feed(`ธงแดงด่าน ${level} มีของรางวัล! ใครถึงก่อนได้${HATS[prizeHatFor(level)]}`),1200);
   if(net.nr)feed(`คุณผ่านด่าน ${g.L}`);
 }
 
@@ -385,7 +417,7 @@ $('bRestart').onclick=()=>{newGame();startPlay()};
 $('bNewMap').onclick=()=>{seed=randSeed();$('seedIn').value=seed;if(net.nr&&net.host)newMapForRoom();newGame();startPlay();toast('แผนที่ใหม่ #'+seed)};
 $('bMenu').onclick=()=>{leaveRoom();state='menu';$('pause').classList.remove('on');$('menu').classList.add('on');saveBest();showBest()};
 function pause(){if(state!=='play')return;state='pause';
-  $('linkRow').style.display=net.ready?'flex':'none';$('linkIn').value=net.ready?roomLink():'';
+  $('linkRow').style.display=net.ready?'flex':'none';$('inviteRow').style.display=net.ready?'none':'flex';$('inviteNote').textContent=net.ready?'':'ตอนนี้เล่นคนเดียวอยู่ เลยยังไม่มีลิงก์ กดปุ่มนี้เพื่อสร้างห้อง (แผนที่เดิม เริ่มใหม่จากจุดแรก)';$('linkIn').value=net.ready?roomLink():'';
   $('pauseRoom').textContent=net.nr?`ห้อง ${net.code.toUpperCase()} · ${net.host?'คุณเป็นหัวห้อง':'หัวห้องเป็นคนเลือกแผนที่'}`:'';
   $('bNewMap').disabled=!!net.nr&&!net.host;
   $('pause').classList.add('on');try{document.exitPointerLock()}catch(e){}saveBest()}
@@ -445,10 +477,11 @@ function step(dt){
 // ---------- online (PeerJS / WebRTC, no server of your own) ----------
 // Host's browser is the room: friends connect to it directly, host relays everyone's position.
 const MAXP=4;
-const net={peer:null,nr:null,code:'',host:false,epoch:0,others:new Map(),conns:new Map(),conn:null,myId:'',lastSend:0,ready:false,timer:0};
+const prizeBoxes=new Map();
+const net={claimed:new Map(),peer:null,nr:null,code:'',host:false,epoch:0,others:new Map(),conns:new Map(),conn:null,myId:'',lastSend:0,ready:false,timer:0};
 function remoteMaxLv(){let m=1;for(const o of net.others.values())m=Math.max(m,o.lv);return m}
 const num=v=>typeof v==='number'&&Number.isFinite(v)?v:0;
-function note(t){$('onlineNote').textContent=t}
+function note(t){$('onlineNote').textContent=t;$('inviteNote').textContent=t}
 function roomLink(){return location.origin+location.pathname+'?room='+net.code.toUpperCase()}
 function labelTex(name,lv,col){
   const c=document.createElement('canvas');c.width=256;c.height=72;const g=c.getContext('2d');
@@ -465,7 +498,7 @@ function upsertPeer(id,d){
   const lv=Math.min(80,Math.max(1,num(d.lv)|0));
   if(!o){
     o={c:makeChar(col),pos:new THREE.Vector3(num(d.p[0]),num(d.p[1]),num(d.p[2])),tgt:new THREE.Vector3(),vel:new THREE.Vector3(),rot:0,air:false,t:0,lv,name:'',col:-1,h:id==='host'};
-    o.label=new THREE.Sprite(new THREE.SpriteMaterial({depthWrite:false}));o.label.scale.set(2.6,.73,1);o.label.position.y=2.9;o.c.root.add(o.label);
+    o.label=new THREE.Sprite(new THREE.SpriteMaterial({depthWrite:false}));o.label.scale.set(2.6,.73,1);o.label.position.y=3.75;o.c.root.add(o.label);
     net.others.set(id,o);feed(`${name} เข้าห้อง`);SFX.join();
   }
   if(lv>o.lv){feed(`${name} ผ่านด่าน ${lv-1}!`);SFX.friendLevel()}
@@ -473,39 +506,43 @@ function upsertPeer(id,d){
     o.label.material.map=labelTex(name,lv,col);o.label.material.needsUpdate=true;o.c.shirt.color.set(SHIRTS[col])}
   o.tgt.set(num(d.p[0]),num(d.p[1]),num(d.p[2]));o.vel.set(num(d.p[3]),num(d.p[4]),num(d.p[5]));
   o.rot=num(d.p[6]);o.air=!d.p[7];o.t=performance.now();
+  const hat=Math.min(3,Math.max(0,num(d.hat)|0));if(o.hat!==hat){o.hat=hat;setHat(o.c,hat)}
   if(state!=='menu')ensureLevels(lv);
 }
 function removePeer(id){const o=net.others.get(id);if(!o)return;scene.remove(o.c.root);
   o.c.root.traverse(x=>{if(x.geometry)x.geometry.dispose()});net.others.delete(id);feed(`${o.name} ออกจากห้อง`);SFX.leave()}
 function myState(){const r2=v=>Math.round(v*100)/100;
-  return{t:'st',n:myName,c:myCol,lv:level,p:[r2(P.pos.x),r2(P.pos.y),r2(P.pos.z),r2(P.vel.x),r2(P.vel.y),r2(P.vel.z),r2(me.root.rotation.y),P.grounded?1:0]}}
+  return{t:'st',n:myName,c:myCol,lv:level,p:[r2(P.pos.x),r2(P.pos.y),r2(P.pos.z),r2(P.vel.x),r2(P.vel.y),r2(P.vel.z),r2(me.root.rotation.y),P.grounded?1:0],hat:wearing}}
 function broadcast(m,except){for(const [k,c] of net.conns)if(k!==except&&c.open)try{c.send(m)}catch(e){}}
 function sendPresence(force){
   if(!net.nr||!net.ready)return;const now=performance.now();if(!force&&now-net.lastSend<50)return;net.lastSend=now;
   const s=myState();
   if(net.host){s.id='host';broadcast(s)}else if(net.conn&&net.conn.open)try{net.conn.send(s)}catch(e){}
 }
-function newMapForRoom(){net.epoch++;broadcast({t:'map',s:seed,e:net.epoch})}
+function newMapForRoom(){net.claimed.clear();net.epoch++;broadcast({t:'map',s:seed,e:net.epoch})}
 function enterRoom(){
-  net.ready=true;newGame();
+  net.ready=true;$('bLinkTop').style.display=net.host?'':'none';newGame();
   $('roomChip').style.display='';$('hRoom').textContent=net.code.toUpperCase();$('plist').style.display='block';
   note('');startPlay();
-  toast('ห้อง '+net.code.toUpperCase(),net.host?'กด "พัก" แล้วคัดลอกลิงก์ห้องส่งให้เพื่อน':'เข้าห้องแล้ว แผนที่ #'+seed);
+  setTimeout(()=>feed('ธงแดงด่าน 10 มีของรางวัล ใครถึงก่อนได้หมวก!'),2500);
+  toast('ห้อง '+net.code.toUpperCase(),net.host?'กดปุ่ม "ลิงก์ห้อง" มุมขวาบน แล้วส่งให้เพื่อน':'เข้าห้องแล้ว แผนที่ #'+seed);
 }
 function newCode(){const a='abcdefghjkmnpqrstuvwxyz23456789';let c='';for(let i=0;i<4;i++)c+=a[Math.floor(Math.random()*a.length)];return c}
 function hostRoom(tries){
   if(typeof Peer==='undefined'){note('โหลดระบบออนไลน์ไม่สำเร็จ ลองรีเฟรชหน้า');return}
-  leaveRoom();readSeed();const code=newCode();note('กำลังสร้างห้อง...');
+  leaveRoom();net.claimed.clear();readSeed();const code=newCode();note('กำลังสร้างห้อง...');
   const peer=new Peer('onlyup-'+code);net.peer=peer;net.nr=peer;net.code=code;net.host=true;net.epoch=0;
   peer.on('open',()=>{if(net.peer===peer)enterRoom()});
   peer.on('connection',c=>{
     c.on('open',()=>{
       if(net.conns.size>=MAXP-1){try{c.send({t:'full'})}catch(e){}setTimeout(()=>c.close(),400);return}
-      net.conns.set(c.peer,c);c.send({t:'map',s:seed,e:net.epoch});
-      for(const [id,o] of net.others)if(id!==c.peer)c.send({t:'st',id,n:o.name,c:o.col,lv:o.lv,p:[o.tgt.x,o.tgt.y,o.tgt.z,0,0,0,o.rot,1]});
+      net.conns.set(c.peer,c);c.send({t:'map',s:seed,e:net.epoch});c.send({t:'prizes',list:[...net.claimed].map(([L,v])=>[L,v.by,v.name])});
+      for(const [id,o] of net.others)if(id!==c.peer)c.send({t:'st',id,n:o.name,c:o.col,lv:o.lv,hat:o.hat,p:[o.tgt.x,o.tgt.y,o.tgt.z,0,0,0,o.rot,1]});
     });
-    c.on('data',d=>{if(!d||typeof d!=='object'||d.t!=='st'||!net.conns.has(c.peer))return;
-      upsertPeer(c.peer,d);broadcast({t:'st',id:c.peer,n:d.n,c:d.c,lv:d.lv,p:d.p},c.peer)});
+    c.on('data',d=>{if(!d||typeof d!=='object'||!net.conns.has(c.peer))return;
+      if(d.t==='claim'){const L=num(d.L)|0;if(L>0&&L%10===0)award(L,c.peer,(net.others.get(c.peer)||{}).name||'เพื่อน');return}
+      if(d.t!=='st')return;
+      upsertPeer(c.peer,d);broadcast({t:'st',id:c.peer,n:d.n,c:d.c,lv:d.lv,hat:d.hat,p:d.p},c.peer)});
     c.on('close',()=>{if(!net.conns.has(c.peer))return;net.conns.delete(c.peer);removePeer(c.peer);broadcast({t:'left',id:c.peer})});
   });
   peer.on('error',e=>{
@@ -518,7 +555,7 @@ function joinRoom(code){
   if(typeof Peer==='undefined'){note('โหลดระบบออนไลน์ไม่สำเร็จ ลองรีเฟรชหน้า');return}
   code=String(code).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6);
   if(code.length<3){note('ใส่รหัสห้อง 4 ตัวก่อนนะ');return}
-  leaveRoom();note('กำลังเข้าห้อง '+code.toUpperCase()+'...');
+  leaveRoom();net.claimed.clear();note('กำลังเข้าห้อง '+code.toUpperCase()+'...');
   const peer=new Peer();net.peer=peer;net.nr=peer;net.code=code;net.host=false;
   peer.on('open',id=>{
     if(net.peer!==peer)return;net.myId=id;
@@ -526,9 +563,11 @@ function joinRoom(code){
     c.on('data',d=>{if(!d||typeof d!=='object'||net.peer!==peer)return;
       if(d.t==='map'){const s=Math.max(1,num(d.s)|0),first=!net.ready;const changed=s!==seed||num(d.e)!==net.epoch;
         seed=s;net.epoch=num(d.e);$('seedIn').value=seed;clearTimeout(net.timer);
-        if(first)enterRoom();else if(changed){newGame();toast('หัวห้องสุ่มแผนที่ใหม่','แผนที่ #'+seed)}}
+        if(first)enterRoom();else if(changed){net.claimed.clear();newGame();toast('หัวห้องสุ่มแผนที่ใหม่','แผนที่ #'+seed)}}
       else if(d.t==='st'&&d.id!==id)upsertPeer(d.id,d);
       else if(d.t==='left')removePeer(d.id);
+      else if(d.t==='prize')onPrize(num(d.L)|0,String(d.by),String(d.name||'เพื่อน').slice(0,14));
+      else if(d.t==='prizes'&&Array.isArray(d.list)){for(const e of d.list.slice(0,20))if(Array.isArray(e))net.claimed.set(num(e[0])|0,{by:String(e[1]),name:String(e[2]||'เพื่อน').slice(0,14)});syncPrizes()}
       else if(d.t==='full'){leaveRoom();note('ห้องนี้เต็มแล้ว (สูงสุด '+MAXP+' คน)');backToMenu()}
     });
     c.on('close',()=>{if(net.peer!==peer)return;const was=net.ready;leaveRoom();if(was){backToMenu();note('หัวห้องออกไปแล้ว ห้องปิด')}});
@@ -542,13 +581,40 @@ function leaveRoom(){
   for(const c of net.conns.values())try{c.close()}catch(e){}net.conns.clear();if(net.conn)try{net.conn.close()}catch(e){}net.conn=null;
   try{p.destroy()}catch(e){}
   for(const o of net.others.values())scene.remove(o.c.root);net.others.clear();
-  net.host=false;$('roomChip').style.display='none';$('plist').style.display='none';
+  net.claimed.clear();syncPrizes();
+  net.host=false;$('bLinkTop').style.display='none';$('roomChip').style.display='none';$('plist').style.display='none';
+}
+function makePrize(){const g=new THREE.Group(),red=new THREE.MeshLambertMaterial({color:'#e0453a',emissive:'#3a0000'}),gold=new THREE.MeshLambertMaterial({color:'#ffd84a',emissive:'#443300'});
+  g.add(box(1,1,1,red),box(1.04,1.04,.22,gold),box(.22,1.04,1.04,gold));
+  const b1=box(.46,.26,.12,gold);b1.position.set(-.2,.62,0);b1.rotation.z=.5;const b2=box(.46,.26,.12,gold);b2.position.set(.2,.62,0);b2.rotation.z=-.5;g.add(b1,b2);
+  scene.add(g);return g}
+function syncPrizes(){
+  for(const [L,b] of prizeBoxes)if(!net.ready||net.claimed.has(L)||b.userData.g!==goals[L]){scene.remove(b);b.traverse(x=>{if(x.geometry)x.geometry.dispose()});prizeBoxes.delete(L)}
+  if(!net.ready)return;
+  for(let L=10;L<goals.length;L+=10){const g=goals[L];if(!g||net.claimed.has(L)||prizeBoxes.has(L))continue;
+    const b=makePrize();b.userData={g,y:g.top+1.1};b.position.set(g.base.x,g.top+1.1,g.base.z);prizeBoxes.set(L,b)}
+}
+function tryClaim(L){
+  const c=net.claimed.get(L);if(c){feed(`รางวัลด่าน ${L} ถูก ${c.name} เก็บไปแล้ว`);return}
+  if(net.host)award(L,'host',myName);else if(net.conn&&net.conn.open)try{net.conn.send({t:'claim',L})}catch(e){}
+}
+function award(L,by,name){if(!net.host||net.claimed.has(L))return;broadcast({t:'prize',L,by,name});onPrize(L,by,name)}
+function onPrize(L,by,name){
+  if(!(L>0)||net.claimed.has(L))return;net.claimed.set(L,{by,name});syncPrizes();
+  const hat=prizeHatFor(L),mine=by===(net.host?'host':net.myId);
+  if(mine){if(!ownedHats.includes(hat)){ownedHats.push(hat);store.set('hats',ownedHats)}wearHat(hat);
+    setTimeout(()=>{toast('ได้รางวัล! '+HATS[hat],'สวมให้แล้ว เปลี่ยนหมวกได้ที่เมนูหลัก');SFX.checkpoint()},900)}
+  else{toast(`${name} ได้${HATS[hat]}!`,`ถึงธงแดงด่าน ${L} เป็นคนแรก`);SFX.friendLevel()}
+  feed(`${name} ได้${HATS[hat]} (ด่าน ${L})`);
 }
 function backToMenu(){state='menu';$('pause').classList.remove('on');$('menu').classList.add('on');try{document.exitPointerLock()}catch(e){}}
 function lobbyPresence(){}
 $('bCreate').onclick=()=>hostRoom(0);
 $('bJoin').onclick=()=>joinRoom($('codeIn').value);
 $('codeIn').onkeydown=e=>{if(e.key==='Enter')joinRoom($('codeIn').value)};
+$('bInvite').onclick=()=>{$('inviteNote').textContent='กำลังสร้างห้อง...';hostRoom(0)};
+$('bLinkTop').onclick=async e=>{e.currentTarget.blur();const l=roomLink();
+  try{await navigator.clipboard.writeText(l);toast('คัดลอกลิงก์ห้องแล้ว','ส่งให้เพื่อนได้เลย')}catch(err){pause()}};
 $('bCopy').onclick=async()=>{const l=roomLink();$('linkIn').value=l;
   try{await navigator.clipboard.writeText(l);$('bCopy').textContent='คัดลอกแล้ว'}catch(e){$('linkIn').select();$('bCopy').textContent='กด Ctrl+C'}
   setTimeout(()=>$('bCopy').textContent='คัดลอกลิงก์',1500)};
@@ -597,6 +663,7 @@ function visuals(dt){
   sun.position.set(P.pos.x+16,P.pos.y+30,P.pos.z+10);sun.target.position.copy(P.pos);
   skyCol.copy(skyLow).lerp(skyHigh,Math.min(1,Math.max(0,P.pos.y/260)));
   for(const c of clouds){if(c.position.y<P.pos.y-60)c.position.y+=120;else if(c.position.y>P.pos.y+60)c.position.y-=120}
+  for(const b of prizeBoxes.values()){b.rotation.y+=dt*1.6;b.position.y=b.userData.y+Math.sin(simT*2.2)*.18}
   for(const g of goals)if(g&&g.beam){g.beam.visible=g.L>=level;g.beam.material.opacity=.2+Math.sin(simT*3)*.08}
 }
 let hudT=0;function hud(dt){hudT-=dt;if(hudT>0)return;hudT=.15;
@@ -621,6 +688,7 @@ function frame(now){
 }
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;jumpHeld=false});
+setHat(me,wearing);renderHats();
 seed=randSeed();$('seedIn').value=seed;
 newGame();requestAnimationFrame(frame);
 }
