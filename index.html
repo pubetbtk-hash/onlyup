@@ -87,7 +87,7 @@ kbd{font:600 13px Kanit,sans-serif;background:#fff;border:1px solid #c9dcf5;bord
   <div class="chip"><span>ตก</span><b id="hF">0</b></div>
 </div>
 <div id="tr">
-  <div class="row"><button id="bView" title="สลับมุมมอง (V)">มุมมอง 3</button><button id="bPause" title="พักเกม (Esc)">พัก</button></div>
+  <div class="row"><button id="bView" title="สลับมุมมอง (V)">มุมมอง 3</button><button id="bSound" title="เปิด/ปิดเสียง (M)">เสียง: เปิด</button><button id="bPause" title="พักเกม (Esc)">พัก</button></div>
   <div id="plist"></div>
 </div>
 <div id="cross"></div>
@@ -126,7 +126,7 @@ kbd{font:600 13px Kanit,sans-serif;background:#fff;border:1px solid #c9dcf5;bord
   <div class="row"><button class="big" id="bStart">เล่นคนเดียว</button></div>
   <div class="keys">
     <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> เดิน · <kbd>Space</kbd> กระโดด (กดค้างกระโดดสูง) · เมาส์ หมุนกล้อง · ล้อเมาส์ ซูม<br>
-    <kbd>V</kbd> สลับมุมมอง · <kbd>R</kbd> กลับจุดเซฟ · <kbd>Esc</kbd> พัก<br><span id="best"></span>
+    <kbd>V</kbd> สลับมุมมอง · <kbd>R</kbd> กลับจุดเซฟ · <kbd>M</kbd> เปิด/ปิดเสียง · <kbd>Esc</kbd> พัก<br><span id="best"></span>
   </div>
 </div></div>
 
@@ -195,6 +195,51 @@ function animChar(c,sp,air,vy,dt){
   c.lL.rotation.x+=(ll-c.lL.rotation.x)*k;c.rL.rotation.x+=(rl-c.rL.rotation.x)*k;
 }
 const me=makeChar(myCol);
+
+// ---------- sound effects (synthesized with Web Audio, no files) ----------
+const SFX=(()=>{
+  let ctx=null,master=null,nb=null,windG=null,windF=null,muted=!!store.get('mute',false);
+  function init(){
+    if(ctx){if(ctx.state==='suspended')ctx.resume().catch(()=>{});return}
+    try{ctx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return}
+    master=ctx.createGain();master.gain.value=muted?0:.55;master.connect(ctx.destination);
+    nb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    const w=ctx.createBufferSource();w.buffer=nb;w.loop=true;windF=ctx.createBiquadFilter();windF.type='bandpass';windF.frequency.value=350;windF.Q.value=.6;
+    windG=ctx.createGain();windG.gain.value=0;w.connect(windF).connect(windG).connect(master);w.start();
+  }
+  function tone(f,dur,o={}){if(!ctx||muted)return;const t=ctx.currentTime+(o.delay||0),osc=ctx.createOscillator(),g=ctx.createGain();
+    osc.type=o.type||'square';osc.frequency.setValueAtTime(f,t);if(o.slide)osc.frequency.exponentialRampToValueAtTime(Math.max(30,f*o.slide),t+dur);
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(o.vol||.15,t+(o.att||.006));g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    osc.connect(g).connect(master);osc.start(t);osc.stop(t+dur+.03)}
+  function noise(dur,o={}){if(!ctx||muted)return;const t=ctx.currentTime+(o.delay||0),s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),g=ctx.createGain();
+    s.buffer=nb;s.playbackRate.value=o.rate||1;f.type=o.ft||'lowpass';f.frequency.setValueAtTime(o.freq||800,t);if(o.slide)f.frequency.exponentialRampToValueAtTime(Math.max(40,(o.freq||800)*o.slide),t+dur);
+    g.gain.setValueAtTime(o.vol||.15,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    s.connect(f).connect(g).connect(master);s.start(t,Math.random()*1.5);s.stop(t+dur+.03)}
+  return{
+    init,get muted(){return muted},
+    toggle(){muted=!muted;store.set('mute',muted);init();if(master)master.gain.setTargetAtTime(muted?0:.55,ctx.currentTime,.02);return muted},
+    jump(){tone(300,.17,{type:'square',vol:.09,slide:2.3});tone(600,.12,{type:'sine',vol:.06,slide:1.8,delay:.02})},
+    land(k){noise(.07+.12*k,{vol:.06+.3*k,freq:250+700*k});tone(120,.12,{type:'sine',vol:.08+.25*k,slide:.45})},
+    step(){noise(.045,{vol:.045,freq:2200,ft:'bandpass',rate:1.4})},
+    checkpoint(){[523,659,784,1047].forEach((f,i)=>{tone(f,.3,{type:'triangle',vol:.14,delay:i*.075});tone(f*2,.2,{type:'sine',vol:.04,delay:i*.075})})},
+    level(){const n=[[523,.12],[659,.12],[784,.12],[1047,.22],[784,.1],[1047,.45]];let t=0;
+      for(const [f,d] of n){tone(f,d+.08,{type:'square',vol:.08,delay:t});tone(f/2,d+.08,{type:'triangle',vol:.1,delay:t});t+=d}
+      noise(.6,{vol:.08,freq:6000,ft:'highpass',delay:t-.4})},
+    fall(){tone(700,.7,{type:'sawtooth',vol:.06,slide:.15});noise(.7,{vol:.14,freq:1400,slide:.2})},
+    respawn(){tone(392,.12,{type:'sine',vol:.1});tone(587,.18,{type:'sine',vol:.1,delay:.1})},
+    join(){tone(880,.09,{type:'sine',vol:.12});tone(1320,.14,{type:'sine',vol:.1,delay:.08})},
+    leave(){tone(660,.1,{type:'sine',vol:.1});tone(440,.16,{type:'sine',vol:.09,delay:.08})},
+    friendLevel(){tone(988,.1,{type:'triangle',vol:.08});tone(1319,.18,{type:'triangle',vol:.08,delay:.08})},
+    click(){tone(720,.045,{type:'square',vol:.05})},
+    wind(h,vy,on){if(!ctx||!windG)return;const t=ctx.currentTime;
+      const g=on&&!muted?Math.min(.22,.015+Math.min(h,400)/400*.08+Math.max(0,-vy-12)/36*.14):0;
+      windG.gain.setTargetAtTime(g,t,.25);windF.frequency.setTargetAtTime(280+Math.min(h,400)*1.2+Math.abs(vy)*25,t,.3)}
+  };
+})();
+addEventListener('pointerdown',()=>SFX.init(),true);
+addEventListener('keydown',e=>{SFX.init();if(e.code==='KeyM'&&e.target.tagName!=='INPUT')setMuteLabel(SFX.toggle())},true);
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('button'))SFX.click()},true);
+function setMuteLabel(m){$('bSound').textContent=m?'เสียง: ปิด':'เสียง: เปิด'}
 
 // ---------- clouds ----------
 const cloudMat=new THREE.MeshLambertMaterial({color:'#ffffff',transparent:true,opacity:.92});
@@ -272,12 +317,12 @@ function newGame(){
 }
 function respawn(first){
   const c=checkpoint.mesh.position;P.pos.set(c.x,checkpoint.top,c.z);P.vel.set(0,0,0);P.ground=null;
-  if(!first){falls++;toast('กลับจุดเซฟ')}
+  if(!first){falls++;toast('กลับจุดเซฟ');SFX.respawn()}
 }
-function setCheckpoint(p,silent){checkpoint=p;cpCount++;if(p.flag)p.flag.material.color.set('#ffc928');if(!silent)toast('บันทึกจุดเซฟแล้ว')}
+function setCheckpoint(p,silent){checkpoint=p;cpCount++;if(p.flag)p.flag.material.color.set('#ffc928');if(!silent){toast('บันทึกจุดเซฟแล้ว');SFX.checkpoint()}}
 function reachGoal(g){
   level=g.L+1;setCheckpoint(g,true);ensureLevels(level);
-  toast(`ผ่านด่าน ${g.L}!`,`ด่าน ${level} ยากขึ้นแล้ว`);
+  toast(`ผ่านด่าน ${g.L}!`,`ด่าน ${level} ยากขึ้นแล้ว`);SFX.level();
   if(net.nr)feed(`คุณผ่านด่าน ${g.L}`);
 }
 
@@ -322,6 +367,7 @@ function toggleView(){view=view===3?1:3;$('bView').textContent='มุมมอ�
 document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>{if(+b.dataset.v!==view)toggleView()});
 $('bView').onclick=e=>{toggleView();e.currentTarget.blur()};
 $('bPause').onclick=()=>pause();
+$('bSound').onclick=e=>{setMuteLabel(SFX.toggle());e.currentTarget.blur()};setMuteLabel(SFX.muted);
 $('cols').innerHTML=SHIRTS.map((c,i)=>`<button data-i="${i}" style="background:${c}" aria-label="สีเสื้อ ${i+1}"></button>`).join('');
 function paintCols(){document.querySelectorAll('#cols button').forEach(b=>b.classList.toggle('sel',+b.dataset.i===myCol))}
 document.querySelectorAll('#cols button').forEach(b=>b.onclick=()=>{myCol=+b.dataset.i;me.shirt.color.set(SHIRTS[myCol]);store.set('col',myCol);paintCols();lobbyPresence()});
@@ -382,15 +428,18 @@ function step(dt){
   const acc=(P.grounded?75:32)*dt;
   P.vel.x=approach(P.vel.x,tx,acc);P.vel.z=approach(P.vel.z,tz,acc);
   P.coyote=P.grounded?.11:P.coyote-dt;P.buf-=dt;
-  if(P.buf>0&&P.coyote>0){P.vel.y=JUMP;P.coyote=0;P.buf=0;P.grounded=false;P.ground=null}
+  if(P.buf>0&&P.coyote>0){SFX.jump();P.vel.y=JUMP;P.coyote=0;P.buf=0;P.grounded=false;P.ground=null}
   P.vel.y-=G*dt*(P.vel.y>0&&!jumpHeld?2.2:1);P.vel.y=Math.max(P.vel.y,-48);
-  P.grounded=false;P.ground=null;
+  const wasG=P.grounded,vyB=P.vel.y;P.grounded=false;P.ground=null;
   let d=P.vel.x*dt;P.pos.x+=d;resolve('x',d);
   d=P.vel.z*dt;P.pos.z+=d;resolve('z',d);
   d=P.vel.y*dt;P.pos.y+=d;resolve('y',d);
+  if(P.grounded&&!wasG&&vyB<-5)SFX.land(Math.min(1,(-vyB-5)/30));
   const g=P.ground;
   if(g){if(g.kind==='goal'&&g.L>=level)reachGoal(g);else if(g.kind==='cp'&&g.order>checkpoint.order)setCheckpoint(g)}
-  if(P.pos.y<checkpoint.top-32)respawn();
+  if(P.pos.y<checkpoint.top-14&&!P.fellSfx){P.fellSfx=true;SFX.fall()}
+  if(P.grounded)P.fellSfx=false;
+  if(P.pos.y<checkpoint.top-32){P.fellSfx=false;respawn()}
 }
 
 // ---------- online (PeerJS / WebRTC, no server of your own) ----------
@@ -417,9 +466,9 @@ function upsertPeer(id,d){
   if(!o){
     o={c:makeChar(col),pos:new THREE.Vector3(num(d.p[0]),num(d.p[1]),num(d.p[2])),tgt:new THREE.Vector3(),vel:new THREE.Vector3(),rot:0,air:false,t:0,lv,name:'',col:-1,h:id==='host'};
     o.label=new THREE.Sprite(new THREE.SpriteMaterial({depthWrite:false}));o.label.scale.set(2.6,.73,1);o.label.position.y=2.9;o.c.root.add(o.label);
-    net.others.set(id,o);feed(`${name} เข้าห้อง`);
+    net.others.set(id,o);feed(`${name} เข้าห้อง`);SFX.join();
   }
-  if(lv>o.lv)feed(`${name} ผ่านด่าน ${lv-1}!`);
+  if(lv>o.lv){feed(`${name} ผ่านด่าน ${lv-1}!`);SFX.friendLevel()}
   if(o.name!==name||o.lv!==lv||o.col!==col){o.name=name;o.lv=lv;o.col=col;if(o.label.material.map)o.label.material.map.dispose();
     o.label.material.map=labelTex(name,lv,col);o.label.material.needsUpdate=true;o.c.shirt.color.set(SHIRTS[col])}
   o.tgt.set(num(d.p[0]),num(d.p[1]),num(d.p[2]));o.vel.set(num(d.p[3]),num(d.p[4]),num(d.p[5]));
@@ -427,7 +476,7 @@ function upsertPeer(id,d){
   if(state!=='menu')ensureLevels(lv);
 }
 function removePeer(id){const o=net.others.get(id);if(!o)return;scene.remove(o.c.root);
-  o.c.root.traverse(x=>{if(x.geometry)x.geometry.dispose()});net.others.delete(id);feed(`${o.name} ออกจากห้อง`)}
+  o.c.root.traverse(x=>{if(x.geometry)x.geometry.dispose()});net.others.delete(id);feed(`${o.name} ออกจากห้อง`);SFX.leave()}
 function myState(){const r2=v=>Math.round(v*100)/100;
   return{t:'st',n:myName,c:myCol,lv:level,p:[r2(P.pos.x),r2(P.pos.y),r2(P.pos.z),r2(P.vel.x),r2(P.vel.y),r2(P.vel.z),r2(me.root.rotation.y),P.grounded?1:0]}}
 function broadcast(m,except){for(const [k,c] of net.conns)if(k!==except&&c.open)try{c.send(m)}catch(e){}}
@@ -524,7 +573,9 @@ function visuals(dt){
   const sp=Math.hypot(P.vel.x,P.vel.z);
   if(view===1)P.face=yaw+Math.PI;else if(sp>.6)P.face=lerpAng(P.face,Math.atan2(P.vel.x,P.vel.z),1-Math.exp(-14*dt));
   me.root.rotation.y=view===1?P.face:lerpAng(me.root.rotation.y,P.face,1-Math.exp(-18*dt));
-  animChar(me,sp,!(P.grounded||P.coyote>0),P.vel.y,dt);
+  const stepN=Math.floor(me.ph/Math.PI);animChar(me,sp,!(P.grounded||P.coyote>0),P.vel.y,dt);
+  if(state==='play'&&P.grounded&&sp>1.5&&Math.floor(me.ph/Math.PI)!==stepN)SFX.step();
+  SFX.wind(P.pos.y,P.vel.y,state==='play');
   // remote players: extrapolate + smooth
   const now=performance.now();
   for(const o of net.others.values()){
